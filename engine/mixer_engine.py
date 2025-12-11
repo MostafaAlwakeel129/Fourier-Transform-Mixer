@@ -43,9 +43,9 @@ class MixerEngine:
         if total_mag_weight > 0:
             for idx, w in magnitude_sources.items():
                 if idx < len(images):
-                    mixed_magnitude += images[idx].get_data('magnitude') * (w / total_mag_weight)
+                    mixed_magnitude += images[idx].get_visual_data('magnitude') * (w / total_mag_weight)
         else:
-            mixed_magnitude = images[0].get_data('magnitude')
+            mixed_magnitude = images[0].get_visual_data('magnitude')
         
         # Mix phases
         mixed_phase = np.zeros(shape, dtype=np.float64)
@@ -53,9 +53,9 @@ class MixerEngine:
         if total_phase_weight > 0:
             for idx, w in phase_sources.items():
                 if idx < len(images):
-                    mixed_phase += images[idx].get_data('phase') * (w / total_phase_weight)
+                    mixed_phase += images[idx].get_visual_data('phase') * (w / total_phase_weight)
         else:
-            mixed_phase = images[0].get_data('phase')
+            mixed_phase = images[0].get_visual_data('phase')
         
         # Apply mask to magnitude if provided
         if mask is not None:
@@ -89,9 +89,9 @@ class MixerEngine:
         if total_real_weight > 0:
             for idx, w in real_sources.items():
                 if idx < len(images):
-                    mixed_real += images[idx].get_data('real') * (w / total_real_weight)
+                    mixed_real += images[idx].get_visual_data('real') * (w / total_real_weight)
         else:
-            mixed_real = images[0].get_data('real')
+            mixed_real = images[0].get_visual_data('real')
         
         # Mix imaginary parts
         mixed_imag = np.zeros(shape, dtype=np.float64)
@@ -99,9 +99,9 @@ class MixerEngine:
         if total_imag_weight > 0:
             for idx, w in imag_sources.items():
                 if idx < len(images):
-                    mixed_imag += images[idx].get_data('imag') * (w / total_imag_weight)
+                    mixed_imag += images[idx].get_visual_data('imag') * (w / total_imag_weight)
         else:
-            mixed_imag = images[0].get_data('imag')
+            mixed_imag = images[0].get_visual_data('imag')
         
         # Apply mask if provided
         if mask is not None:

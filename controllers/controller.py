@@ -43,9 +43,9 @@ class Controller:
             # Enforce unified size across all images
             self._unificator.enforce_unified_size(self._session) # gets all present image models from globalsessionstate and gets minimum width/height from the created min_shape tuple then STORES the current min shape of all the currently uploaded images then resizes all images.
 
-            raw_image_data = image_model.get_data('raw')
+            raw_image_data = image_model.get_visual_data('raw')
 
-            ft_component_data = image_model.get_data(ft_component)
+            ft_component_data = image_model.get_visual_data(ft_component)
 
             if ft_component in ['magnitude', 'real', 'imag']:
                 ft_component_data = np.log(np.abs(ft_component_data) + 1e-10)
@@ -103,11 +103,11 @@ class Controller:
             return None
     
         try:
-            data = image_model.get_data(mode)
+            data = image_model.get_visual_data(mode)
         
             # Apply log transform for FT components (for visualization)
-            if mode in ['magnitude', 'real', 'imag']:
-                data = np.log(np.abs(data) + 1e-10)
+          #  if mode in ['magnitude', 'real', 'imag']:
+           #     data = np.log(np.abs(data) + 1e-10)
         
             return data
     
