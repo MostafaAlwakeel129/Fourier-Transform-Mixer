@@ -1,121 +1,140 @@
-"""MixerEngine class for performing image mixing and reconstruction."""
-
 import numpy as np
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Literal
 from models.image_model import ImageModel
 from utils.region_handler import RegionHandler
-
 
 class MixerEngine:
     """Performs image mixing and reconstruction using Fourier Transform components."""
     
     def __init__(self):
-        """Initialize MixerEngine with RegionHandler."""
         self._region_handler = RegionHandler()
-    
-    def mix_images(self, images: List[ImageModel], weights_dict: Dict[int, float], mask: Optional[np.ndarray] = None) -> np.ndarray:
+
+    def _perform_ifft(self, complex_ft: np.ndarray) -> np.ndarray:
         """
-        Mix multiple images using specified weights and an optional mask.
-        
-        Args:
-            images: List of ImageModel instances to mix
-            weights_dict: Dictionary mapping image index to weight value
-            mask: Optional mask array for region-based mixing
-        
-        Returns:
-            NumPy array representing the mixed image
+        Centralized IFFT method:
+        - Undo shift (ifftshift)
+        - Compute inverse FFT
+        - Return real clipped image
         """
+        # Undo shift applied to FFT before masking
+        unshifted_ft = np.fft.ifftshift(complex_ft)
+        
+        # Inverse FFT
+        result = np.fft.ifft2(unshifted_ft)
+        result = np.real(result)
+        result = np.clip(result, 0, 255)
+        return result
+
+    def mix_images_mag_phase(
+        self, 
+        magnitude_sources: Dict[int, float],
+        phase_sources: Dict[int, float],
+        images: List[ImageModel],
+        mask: Optional[np.ndarray] = None
+    ) -> np.ndarray:
         if not images:
-            raise ValueError("No images provided for mixing")
+            raise ValueError("No images provided")
         
-        if not weights_dict:
-            raise ValueError("No weights provided for mixing")
-        
-        # Get the shape from the first image
         shape = images[0].shape
         
-        # Initialize mixed components
-        mixed_magnitude = np.zeros(shape, dtype=np.complex128)
-        mixed_phase = np.zeros(shape, dtype=np.complex128)
+        # Mix magnitudes
+        mixed_magnitude = np.zeros(shape, dtype=np.float64)
+        total_mag_weight = sum(magnitude_sources.values())
+        if total_mag_weight > 0:
+            for idx, w in magnitude_sources.items():
+                if idx < len(images):
+                    mixed_magnitude += images[idx].get_data('magnitude') * (w / total_mag_weight)
+        else:
+            mixed_magnitude = images[0].get_data('magnitude')
         
-        # Normalize weights
-        total_weight = sum(weights_dict.values())
-        if total_weight == 0:
-            total_weight = 1.0
+        # Mix phases
+        mixed_phase = np.zeros(shape, dtype=np.float64)
+        total_phase_weight = sum(phase_sources.values())
+        if total_phase_weight > 0:
+            for idx, w in phase_sources.items():
+                if idx < len(images):
+                    mixed_phase += images[idx].get_data('phase') * (w / total_phase_weight)
+        else:
+            mixed_phase = images[0].get_data('phase')
         
-        # Mix magnitude and phase components
-        for idx, image in enumerate(images):
-            if idx not in weights_dict:
-                continue
-            
-            weight = weights_dict[idx] / total_weight
-            
-            # Get magnitude and phase
-            magnitude = image.get_data('magnitude')
-            phase = image.get_data('phase')
-            
-            # Apply weights
-            weighted_magnitude = self._apply_weights(magnitude, weight)
-            weighted_phase = self._apply_weights(phase, weight)
-            
-            # Accumulate
-            mixed_magnitude += weighted_magnitude
-            mixed_phase += weighted_phase
+        # Apply mask to magnitude if provided
+        if mask is not None:
+            if mask.shape != shape:
+                raise ValueError("Mask shape does not match image shape")
+            mixed_magnitude *= mask
+            # TODO
+            # mixed_phase*=mask
+        
+        # Reconstruct complex
+        complex_ft = mixed_magnitude * np.exp(1j * mixed_phase)
+        
+        # Use centralized IFFT method
+        return self._perform_ifft(complex_ft)
+
+    def mix_images_real_imag(
+        self,
+        real_sources: Dict[int, float],
+        imag_sources: Dict[int, float],
+        images: List[ImageModel],
+        mask: Optional[np.ndarray] = None
+    ) -> np.ndarray:
+        if not images:
+            raise ValueError("No images provided")
+        
+        shape = images[0].shape
+        
+        # Mix real parts
+        mixed_real = np.zeros(shape, dtype=np.float64)
+        total_real_weight = sum(real_sources.values())
+        if total_real_weight > 0:
+            for idx, w in real_sources.items():
+                if idx < len(images):
+                    mixed_real += images[idx].get_data('real') * (w / total_real_weight)
+        else:
+            mixed_real = images[0].get_data('real')
+        
+        # Mix imaginary parts
+        mixed_imag = np.zeros(shape, dtype=np.float64)
+        total_imag_weight = sum(imag_sources.values())
+        if total_imag_weight > 0:
+            for idx, w in imag_sources.items():
+                if idx < len(images):
+                    mixed_imag += images[idx].get_data('imag') * (w / total_imag_weight)
+        else:
+            mixed_imag = images[0].get_data('imag')
         
         # Apply mask if provided
         if mask is not None:
             if mask.shape != shape:
-                raise ValueError(f"Mask shape {mask.shape} does not match image shape {shape}")
-            mixed_magnitude *= mask
-            mixed_phase *= mask
+                raise ValueError("Mask shape does not match image shape")
+            mixed_real *= mask
+            mixed_imag *= mask
         
-        # Reconstruct complex array from magnitude and phase
-        complex_data = self._reconstruct_complex(mixed_magnitude, mixed_phase)
+        # Reconstruct complex
+        complex_ft = mixed_real + 1j * mixed_imag
         
-        # Perform inverse FFT
-        result = self._perform_ifft(complex_data)
-        
-        # Normalize to valid image range
-        result = np.real(result)
-        result = np.clip(result, 0, 255)
-        
-        return result
-    
-    def _apply_weights(self, component: np.ndarray, weight: float) -> np.ndarray:
-        """
-        Apply weights to an image component.
-        
-        Args:
-            component: Image component array (magnitude, phase, etc.)
-            weight: Weight value to apply
-        
-        Returns:
-            Weighted component array
-        """
-        return component * weight
-    
-    def _reconstruct_complex(self, mag: np.ndarray, phase: np.ndarray) -> np.ndarray:
-        """
-        Reconstruct complex data from magnitude and phase.
-        
-        Args:
-            mag: Magnitude array
-            phase: Phase array
-        
-        Returns:
-            Complex array
-        """
-        return mag * np.exp(1j * phase)
-    
-    def _perform_ifft(self, complex_data: np.ndarray) -> np.ndarray:
-        """
-        Perform the Inverse Fast Fourier Transform.
-        
-        Args:
-            complex_data: Complex frequency domain data
-        
-        Returns:
-            Spatial domain image data
-        """
-        return np.fft.ifft2(complex_data)
+        # Use centralized IFFT method
+        return self._perform_ifft(complex_ft)
 
+    def mix_images_unified(
+        self,
+        mode: Literal['mag_phase', 'real_imag'],
+        component1_sources: Dict[int, float],
+        component2_sources: Dict[int, float],
+        images: List[ImageModel],
+        mask: Optional[np.ndarray] = None
+    ) -> np.ndarray:
+        if mode == 'mag_phase':
+            return self.mix_images_mag_phase(component1_sources, component2_sources, images, mask)
+        elif mode == 'real_imag':
+            return self.mix_images_real_imag(component1_sources, component2_sources, images, mask)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+    def create_region_mask(
+        self,
+        shape: tuple[int, int],
+        rect_coords: Optional[tuple[int, int, int, int]] = None,
+        is_inner: bool = True
+    ) -> np.ndarray:
+        return self._region_handler.create_mask(shape, rect_coords, is_inner)
