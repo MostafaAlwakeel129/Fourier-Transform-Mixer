@@ -1,11 +1,4 @@
-
-
-
 from dash import html, dcc
-import base64
-import io
-from PIL import Image
-import numpy as np
 
 class Layout:
     """Layout class for the Dash application viewport."""
@@ -14,33 +7,62 @@ class Layout:
         """Initialize ViewportLayout with dark-themed layout."""
         pass
 
-    def build_input_card(self, card_id, text_color, card_style, controls_row_style,
-                         control_item_style, display_item_style, upload_style, displays_row_style):
+    def build_input_card(self, card_id, text_color, card_style,
+                         display_item_style, upload_style, displays_row_style):
         """
-        Creates a single input card (Input 1–4) that contains a weight slider,
-        FT component dropdown, image upload area, and Fourier Transform display.
-        The card_id is used to generate unique component IDs for Dash callbacks.
+        Creates a single input card (Input 1–4) with the structure:
         """
         return html.Div([
-            html.H3(f'Input {card_id}', style={'margin': '0 0 16px 0', 'color': text_color}),
-
-            # Controls row
+            # first row: HEADER and SLIDER
             html.Div([
-                html.Div([
-                    html.Label('Weight:', style={'color': text_color, 'fontSize': '12px', 'marginBottom': '5px'}),
+                # Header on the left
+                html.Div(
+                    html.H3(f'Input {card_id}', style={'margin': 0, 'color': text_color}),
+                    style={
+                        'flex': '0 0 auto',
+                        'marginRight': '12px',
+                        'display': 'flex',
+                        'alignItems': 'center'
+                    }
+                ),
+                # Slider aligned right
+                html.Div(
                     dcc.Slider(
                         id=f'weight-slider-{card_id}',
-                        min=0,
-                        max=1,
-                        step=0.05,
+                        min=0, max=1, step=0.05,
                         value=0.25,
                         marks={0: '0', 0.5: '0.5', 1: '1'},
                         tooltip={"placement": "bottom", "always_visible": True}
-                    )
-                ], style=control_item_style),
-
+                    ),
+                    style={
+                        'flex': '0 0 45%',   # <<< slider width reduced (change % if needed)
+                        'marginLeft': 'auto'  # pushes slider to the far right
+                    }
+                ),
+            ], style={
+                'display': 'flex',
+                'flexDirection': 'row',
+                'alignItems': 'center',
+                'marginBottom': '14px'
+            }),
+            # second row: UPLOAD and DROPDOWN
+            html.Div([
+                # Upload Button
                 html.Div([
-                    html.Label('FT Component:', style={'color': text_color, 'fontSize': '12px', 'marginBottom': '5px'}),
+                    dcc.Upload(
+                        id=f'upload-image-{card_id}',
+                        children=html.Button(
+                            "Upload Image",
+                            style=upload_style
+                        ),
+                        multiple=False,
+                        accept="image/*",
+                        style={"marginBottom": "6px"}
+                    )
+                ], style={'flex': 1, 'marginRight': '6px'}),
+
+                # FT Component Dropdown
+                html.Div([
                     dcc.Dropdown(
                         id=f'ft-component-select-{card_id}',
                         options=[
@@ -52,28 +74,20 @@ class Layout:
                         value='magnitude',
                         style={'width': '100%', 'color': 'black'}
                     )
-                ], style=control_item_style),
+                ], style={'flex': 1})
 
-            ], style=controls_row_style),
+            ], style={'display': 'flex', 'flexDirection': 'row', 'marginBottom': '12px'}),
 
-            # Displays row
+            # third row: IMAGE and FT DISPLAY
             html.Div([
-                html.Div([
-                    dcc.Upload(
-                        id=f'upload-image-{card_id}',
-                        children=html.Div([
-                            'Drag and Drop or ',
-                            html.A('Select Files', style={'color': '#007bff'})
-                        ], style={'color': text_color}),
-                        style=upload_style,
-                        multiple=False,
-                        accept='image/*'
-                    ),
-                    html.Div(id=f'image-display-{card_id}',
-                             style={'position': 'absolute', 'top': '0', 'left': '0',
-                                    'width': '100%', 'height': '100%'})
-                ], style=display_item_style),
+                # Image Display Area
+                html.Div(
+                    id=f'image-display-{card_id}',
+                    children=[],  # empty initially
+                    style=display_item_style
+                ),
 
+                # FT Display Area
                 html.Div([
                     html.Div(
                         id=f'ft-display-{card_id}',
@@ -85,27 +99,23 @@ class Layout:
                         ],
                         style={'width': '100%', 'height': '100%'}
                     )
-                ], style=display_item_style),
+                ], style=display_item_style)
 
-            ], style=displays_row_style),
+            ], style=displays_row_style)
 
         ], style=card_style)
 
 
     def get_layout(self) -> html.Div:
-        """
-        Get the complete layout with dark theme and floating cards.
+        """Get the full page layout (dark theme)."""
 
-        Returns:
-            HTML Div containing the main page layout
-        """
-        # Dark theme colors
+        # Dark theme
         dark_bg = '#1a1a1a'
         card_bg = '#2d2d2d'
         card_border = '#404040'
         text_color = '#e0e0e0'
 
-        # Card style
+        # Card styling
         card_style = {
             'backgroundColor': card_bg,
             'border': f'1px solid {card_border}',
@@ -116,7 +126,6 @@ class Layout:
             'margin': '8px',
         }
 
-        # Left side container (75% width)
         left_container_style = {
             'width': '75%',
             'float': 'left',
@@ -125,7 +134,6 @@ class Layout:
             'boxSizing': 'border-box',
         }
 
-        # Right side container (25% width)
         right_container_style = {
             'width': '25%',
             'float': 'right',
@@ -134,19 +142,16 @@ class Layout:
             'boxSizing': 'border-box',
         }
 
-        # Row style for cards
         row_style = {
             'display': 'flex',
             'flexDirection': 'row',
             'width': '100%',
         }
 
-        # Card height calculations (same as original)
         card_height = 'calc((100vh - 52px) / 2)'
         card_margin = '8px'
         right_card_height = 'calc(100vh - 36px)'
 
-        # Left card style with flex column layout
         left_card_style = {
             **card_style,
             'flex': '1',
@@ -155,7 +160,6 @@ class Layout:
             'flexDirection': 'column',
         }
 
-        # Right card style
         right_card_style = {
             **card_style,
             'height': right_card_height,
@@ -163,52 +167,32 @@ class Layout:
             'marginBottom': card_margin,
         }
 
-        # Controls row style (slider and dropdown)
-        controls_row_style = {
-            'display': 'flex',
-            'flexDirection': 'row',
-            'width': '100%',
-            'height': '80px',  # Increased height for slider
-            'marginBottom': '10px',
-        }
-
-        # Displays row style (image and FT component)
         displays_row_style = {
             'display': 'flex',
             'flexDirection': 'row',
             'width': '100%',
-            'flex': '1',  # Take remaining space
-        }
-
-        # Individual control/display styles
-        control_item_style = {
             'flex': '1',
-            'margin': '0 5px',
         }
 
         display_item_style = {
-            'flex': '1',
-            'margin': '0 5px',
-            'border': f'1px solid {card_border}',
-            'borderRadius': '8px',
-            'backgroundColor': '#1a1a1a',
-            'position': 'relative',
+            "flex": 1,
+            "borderRadius": "8px",
+            "backgroundColor": "#0f0f0f",  # dark bg
+            "overflow": "hidden",
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "marginRight": "6px"
         }
 
-        # Upload style
-        upload_style = {
-            'width': '100%',
-            'height': '100%',
-            'lineHeight': '100px',
-            'borderWidth': '1px',
-            'borderStyle': 'dashed',
-            'borderColor': card_border,
-            'borderRadius': '8px',
-            'textAlign': 'center',
-            'margin': '0',
-            'backgroundColor': '#0f0f0f',
-            'cursor': 'pointer',
-            'position': 'relative',
+        upload_style={
+            "width": "100%",
+            "padding": "6px",
+            "fontSize": "12px",
+            "cursor": "pointer",
+            "backgroundColor": "#333",
+            "color": "white",
+            "borderRadius": "6px",
         }
 
         cards = []
@@ -218,25 +202,19 @@ class Layout:
                     card_id,
                     text_color,
                     left_card_style,
-                    controls_row_style,
-                    control_item_style,
                     display_item_style,
                     upload_style,
                     displays_row_style
                 )
             )
 
-
         return html.Div([
-            # Main container with dark background
             html.Div([
-                # Left portion (75% width) - 4 cards in 2x2 grid
                 html.Div([
-                    html.Div(cards[:2], style=row_style),  # first row
-                    html.Div(cards[2:], style=row_style)   # second row
+                    html.Div(cards[:2], style=row_style),
+                    html.Div(cards[2:], style=row_style)
                 ], style=left_container_style),
 
-                # Right portion (25% width) - 1 tall card
                 html.Div([
                     html.Div([
                         html.H3('Mixer Output', style={'margin': '0 0 16px 0', 'color': text_color}),
@@ -244,7 +222,6 @@ class Layout:
                     ], style=right_card_style),
                 ], style=right_container_style),
 
-                # Clear float
                 html.Div(style={'clear': 'both'})
             ], style={
                 'backgroundColor': dark_bg,

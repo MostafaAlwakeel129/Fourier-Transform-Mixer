@@ -1,10 +1,4 @@
-"""Callbacks class for callback handlers."""
-
 from dash import Dash, Input, Output, html
-import base64
-import io
-from PIL import Image
-
 
 class Callbacks:
     """Callback class for handling Dash app callbacks."""
@@ -19,32 +13,38 @@ class Callbacks:
         self.app = app
         self._register_callbacks()
 
-    def _register_callbacks(self) -> None:
-        """Register all callbacks for the viewport."""
+    def _register_callbacks(self):
 
-        # Image upload callbacks for each input
+        # -------- IMAGE UPLOAD CALLBACKS -------- #
         for i in range(1, 5):
-            @self.app.callback(
-                Output(f'image-display-{i}', 'children'),
-                [Input(f'upload-image-{i}', 'contents')],
-                prevent_initial_call=True
-            )
-            def update_image_display(contents, card_num=i):
-                if contents is not None:
-                    return self.parse_uploaded_image(contents)
-                return html.Div()
+            self._create_image_callback(i)
 
-        # Slider callbacks for each input (placeholder for future use)
+        # -------- SLIDER CALLBACKS -------- #
         for i in range(1, 5):
-            @self.app.callback(
-                Output(f'weight-slider-{i}', 'value'),
-                [Input(f'weight-slider-{i}', 'value')],
-                prevent_initial_call=True
-            )
-            def update_slider_value(value, card_num=i):
-                # Placeholder - just return the value for now
-                # Future logic can be added here
-                return value
+            self._create_slider_callback(i)
+
+
+    def _create_image_callback(self, card_id):
+        @self.app.callback(
+            Output(f'image-display-{card_id}', 'children'),
+            Input(f'upload-image-{card_id}', 'contents'),
+            prevent_initial_call=True
+        )
+        def update_image(contents):
+            if contents:
+                return self.parse_uploaded_image(contents)
+            return html.Div()
+
+
+    def _create_slider_callback(self, card_id):
+        @self.app.callback(
+            Output(f'weight-slider-{card_id}', 'value'),
+            Input(f'weight-slider-{card_id}', 'value'),
+            prevent_initial_call=True
+        )
+        def update_slider(value):
+            return value
+
 
     def parse_uploaded_image(self, contents):
         """
@@ -57,19 +57,15 @@ class Callbacks:
             html.Img component with uploaded image
         """
         try:
-            # Simply display the uploaded image as-is
+            #display the uploaded image as-is
             return html.Img(
                 src=contents,
                 style={
-                    'width': '100%',
-                    'height': '100%',
-                    'objectFit': 'contain',
-                    'position': 'absolute',
-                    'top': '0',
-                    'left': '0'
+                    "maxWidth": "100%",
+                    "maxHeight": "100%",
+                    "objectFit": "contain",
                 }
             )
-
         except Exception as e:
             return html.Div(
                 f'Error displaying image: {str(e)}',
