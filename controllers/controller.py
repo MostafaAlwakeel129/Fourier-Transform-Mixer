@@ -15,8 +15,9 @@ class Controller:
         """Initialize Controller with session state and unificator."""
         self._session: GlobalSessionState = GlobalSessionState()
         self._unificator: UnitUnificator = UnitUnificator()
+        self._weights: Dict[int, float] = {0: 0.25, 1: 0.25, 2: 0.25, 3: 0.25}
     
-    def handle_upload(self, contents: str, index: int) -> Dict[str, Any]:
+    def handle_upload(self, contents: str, index: int, ft_component: str = 'magnitude') -> Dict[str, Any]:
         """
         Handle image uploads.
         
@@ -25,23 +26,39 @@ class Controller:
             index: Index of the viewport where image is uploaded
         
         Returns:
-            Dictionary with status and any error messages
+                Handle image uploads and prepare display data.
+                Returns ALL FT components so the callback can choose which to display.
         """
         try:
             if contents is None:
                 return {'status': 'error', 'message': 'No content provided'}
             
             # Create new ImageModel and load from contents
-            image_model = ImageModel()
-            image_model.load_from_contents(contents)
+            image_model = ImageModel() #creates instance of imagemodel (due to image being uploaded)
+            image_model.load_from_contents(contents) #process image and converts go gray scale
             
             # Store in session
-            self._session.store_image(index, image_model)
+            self._session.store_image(index, image_model) #stores the current image_model data and its index
             
             # Enforce unified size across all images
-            self._unificator.enforce_unified_size(self._session)
+            self._unificator.enforce_unified_size(self._session) # gets all present image models from globalsessionstate and gets minimum width/height from the created min_shape tuple then STORES the current min shape of all the currently uploaded images then resizes all images.
+
+            raw_image_data = image_model.get_data('raw')
+
+            ft_component_data = image_model.get_data(ft_component)
+
+            if ft_component in ['magnitude', 'real', 'imag']:
+                ft_component_data = np.log(np.abs(ft_component_data) + 1e-10)
             
-            return {'status': 'success', 'message': f'Image {index+1} uploaded successfully'}
+            return {
+            'status': 'success',
+            'message': f'Image {index+1} uploaded successfully',
+            'raw_image_data': raw_image_data.tolist(),
+            'ft_component_data': ft_component_data.tolist(),
+            'ft_component_type': ft_component,
+            'image_shape': image_model.shape,
+            'unified_shape': self._session.get_min_shape()
+        }
         
         except Exception as e:
             return {'status': 'error', 'message': str(e)}
@@ -55,58 +72,47 @@ class Controller:
             index: Index of the viewport/slider
         
         Returns:
-            Dictionary with status
+            Dictionary with updated value and status
         """
         # Slider updates are typically handled by callbacks
         # This method can be used for validation or preprocessing
         if val < 0 or val > 1:
             return {'status': 'error', 'message': 'Weight must be between 0 and 1'}
         
+        self._weights[index] = val
+        
         return {'status': 'success', 'value': val}
     
     def get_plotting_data(self, index: int, mode: Literal['raw', 'magnitude', 'phase', 'real', 'imag'] = 'raw') -> Optional[go.Figure]:
         """
-        Retrieve data for plotting based on index and mode.
-        
-        Args:
-            index: Index of the image to plot
-            mode: Type of component to display ('raw', 'magnitude', 'phase', 'real', 'imag')
-        
-        Returns:
-            Plotly Figure object or None if no image at index
+            Retrieve data for plotting when user switches FT component dropdown.
+    
+            This is called when user changes the FT component selection,
+            NOT during initial upload (that's handled by handle_upload).
+    
+            Args:
+                index: Index of the image (0-3)
+                mode: Type of component to display
+    
+            Returns:
+                Numpy array of the requested data with appropriate scaling
         """
         image_model = self._session.get_image(index)
-        
+    
         if image_model is None:
             return None
-        
+    
         try:
             data = image_model.get_data(mode)
-            
-            # Normalize data for display
-            if mode in ['magnitude', 'real', 'imag']:
-                # Apply log transform for better visualization
-                data = np.log(np.abs(data) + 1e-10)
-            
-            # Create heatmap figure
-            fig = go.Figure(data=go.Heatmap(
-                z=data,
-                colorscale='gray',
-                showscale=True
-            ))
-            
-            fig.update_layout(
-                title=f'Image {index+1} - {mode.capitalize()}',
-                xaxis_title='Width',
-                yaxis_title='Height',
-                autosize=True
-            )
-            
-            return fig
         
+            # Apply log transform for FT components (for visualization)
+            if mode in ['magnitude', 'real', 'imag']:
+                data = np.log(np.abs(data) + 1e-10)
+        
+            return data
+    
         except Exception as e:
-            # Return empty figure on error
-            return go.Figure()
+            return None
     
     def get_session(self) -> GlobalSessionState:
         """
@@ -124,7 +130,5 @@ class Controller:
         Returns:
             Dictionary mapping index to weight value
         """
-        # This would typically be managed by Dash callbacks
-        # Returning empty dict as placeholder
-        return {}
+        return self._weights.copy()
 
