@@ -1,7 +1,21 @@
-from dash import Dash, Input, Output, State, html, dcc, callback_context, no_update
+from dash import Dash, Input, Output, State, html, dcc, callback_context, no_update, ALL
 import plotly.graph_objs as go
 from controllers.controller import Controller
 import numpy as np
+
+# Global controller instance that gets reset on page load
+_controller_instance = None
+
+def get_controller():
+    global _controller_instance
+    if _controller_instance is None:
+        _controller_instance = Controller()
+    return _controller_instance
+
+def reset_controller():
+    global _controller_instance
+    _controller_instance = Controller()
+    return _controller_instance
 
 class Callbacks:
     """Callback class for handling Dash app callbacks."""
@@ -14,10 +28,21 @@ class Callbacks:
             app: Dash application instance
         """
         self.app = app
-        self.controller = Controller()
+        self.controller = get_controller()
         self._register_callbacks()
 
     def _register_callbacks(self):
+
+        # Clear session on page load by detecting URL changes
+        @self.app.callback(
+            Output('upload-image-1', 'contents', allow_duplicate=True),
+            Input('upload-image-1', 'id'),
+            prevent_initial_call='initial_duplicate'
+        )
+        def clear_on_page_load(upload_id):
+            # Reset controller when page loads
+            self.controller = reset_controller()
+            return None
 
         # -------- IMAGE UPLOAD CALLBACKS -------- #
         for i in range(1, 5):
@@ -437,4 +462,3 @@ class Callbacks:
                     return error_div, no_update, job_store
                 else:
                     return no_update, error_div, job_store
-
