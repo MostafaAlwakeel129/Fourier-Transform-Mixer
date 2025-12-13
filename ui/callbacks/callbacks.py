@@ -316,10 +316,10 @@ class Callbacks:
                 comp4_group = 'comp1' if comp4 == 'real' else 'comp2'
             
             # Update slider values in controller
-            self.controller.handle_slider_update(weight1 or 0.25, 0, comp1_group)
-            self.controller.handle_slider_update(weight2 or 0.25, 1, comp2_group)
-            self.controller.handle_slider_update(weight3 or 0.25, 2, comp3_group)
-            self.controller.handle_slider_update(weight4 or 0.25, 3, comp4_group)
+            self.controller.handle_slider_update(weight1 or 0.0, 0, comp1_group)
+            self.controller.handle_slider_update(weight2 or 0.0, 1, comp2_group)
+            self.controller.handle_slider_update(weight3 or 0.0, 2, comp3_group)
+            self.controller.handle_slider_update(weight4 or 0.0, 3, comp4_group)
             
             # Trigger the mixing button update
             self.controller.mix_button_update()

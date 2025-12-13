@@ -29,7 +29,7 @@ class Layout:
                     dcc.Slider(
                         id=f'weight-slider-{card_id}',
                         min=0, max=1, step=0.05,
-                        value=0.25,
+                        value=0.0,
                         marks={0: '0', 1: '1'}, # Minimal marks to save space
                         tooltip={"placement": "bottom", "always_visible": False},
                     )
