@@ -137,10 +137,6 @@ class ImageModel:
         else:
             data = np.zeros_like(data)
 
-        # 4. Apply Brightness and Contrast
-        # Contrast is a multiplier (slope), Brightness is an adder (offset)
-        data = (data * contrast) + brightness
-
         # 5. Clip to valid display range
         return np.clip(data, 0, 1)
 
