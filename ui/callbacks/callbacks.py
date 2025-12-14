@@ -1,4 +1,4 @@
-from dash import Dash, Input, Output, State, html, dcc, callback_context, no_update, ALL
+from dash import Dash, Input, Output, State, html, dcc, callback_context, no_update, ALL, MATCH
 import plotly.graph_objs as go
 from controllers.controller import Controller
 import numpy as np
@@ -55,8 +55,14 @@ class Callbacks:
         # -------- FT MODE CALLBACK -------- #
         self._create_ft_mode_callback()
 
-        # -------- Mix image callbacks -------#
-        self._create_mix_image()
+        # -------- Mix image callback -------#
+        self._create_mix_callback()
+
+        # -------- Progress bar callback -------#
+        self._create_progress_callback()
+
+        #_________Rect update callback -------#
+        self._rect_update_callback()
 
 
     def _create_image_callback(self, card_id):
@@ -264,17 +270,13 @@ class Callbacks:
                     new_values[0], new_values[1], new_values[2], new_values[3])
 
 
-    def _create_mix_image(self):
+    def _create_mix_callback(self):
         """
-        Create callback for the Mix button that processes inputs based on selected viewport.
-        Uses an interval to poll for job completion.
+        Callback for the Mix button - handles only the mixing operation.
+        Starts the job and updates the job store.
         """
         @self.app.callback(
-            [
-                Output('output-viewport1', 'children'),
-                Output('output-viewport2', 'children'),
-                Output('job-store', 'data', allow_duplicate=True)
-            ],
+            Output('job-store', 'data'),
             Input('mix-button', 'n_clicks'),
             [
                 State('viewport-select', 'value'),
@@ -293,16 +295,15 @@ class Callbacks:
             prevent_initial_call=True
         )
         def start_mix_job(n_clicks, viewport, weight1, weight2, weight3, weight4, 
-                        ft_mode, comp1, comp2, comp3, comp4, roi_select, job_store):
+                         ft_mode, comp1, comp2, comp3, comp4, roi_select, job_store):
             """
-            Start the mixing job and store the state.
+            Start the mixing job and update job store.
             """
             if n_clicks == 0:
-                return no_update, no_update, no_update
+                return no_update
             
             print(f"Starting mix job for {viewport}")
             
-            # First, update all sliders in the controller
             # Determine component groups based on FT mode
             if ft_mode == 'mag_phase':
                 comp1_group = 'comp1' if comp1 == 'magnitude' else 'comp2'
@@ -324,74 +325,81 @@ class Callbacks:
             # Trigger the mixing button update
             self.controller.mix_button_update()
             
-            # Create a processing message
-            processing_msg = html.Div([
-                html.Div("Processing...", style={
-                    'color': '#888',
-                    'textAlign': 'center',
-                    'padding': '20px',
-                    'fontSize': '14px'
-                })
-            ])
-            
             # Update job store to indicate job started
             job_store['job_started'] = True
             job_store['viewport'] = viewport
             
-            # Return processing message and updated job store
-            if viewport == 'viewport1':
-                return processing_msg, no_update, job_store
-            else:
-                return no_update, processing_msg, job_store
-        
-        # Create interval callback to check job progress
+            return job_store
+
+
+    def _create_progress_callback(self):
+        """
+        Callback for progress bar - handles polling for job progress and completion.
+        Updates progress bar, progress text, and viewport outputs.
+        """
         @self.app.callback(
             [
-                Output('output-viewport1', 'children', allow_duplicate=True),
-                Output('output-viewport2', 'children', allow_duplicate=True),
+                Output('output-viewport1', 'children'),
+                Output('output-viewport2', 'children'),
+                Output('progress-bar', 'style'),
+                Output('progress-text', 'children'),
                 Output('job-store', 'data', allow_duplicate=True)
             ],
             Input('interval-component', 'n_intervals'),
             State('job-store', 'data'),
             prevent_initial_call=True
         )
-        def check_job_progress(n_intervals, job_store):
+        def update_progress(n_intervals, job_store):
             """
-            Check job progress periodically and update when complete.
+            Check job progress periodically and update progress bar and outputs.
             """
-            # If no job is running, do nothing
+            # If no job is running, return ready state
             if not job_store.get('job_started', False):
-                return no_update, no_update, no_update
+                progress_style = {
+                    'width': '0%',
+                    'height': '100%',
+                    'backgroundColor': '#4CAF50',
+                    'borderRadius': '4px',
+                    'transition': 'width 0.3s ease'
+                }
+                return no_update, no_update, progress_style, "Ready", no_update
             
             # Check if job is still processing
             if self.controller.is_processing():
                 # Get current progress
                 progress = self.controller.get_job_progress()
                 
-                # Create progress message
-                progress_msg = html.Div([
-                    html.Div(f"Processing... {progress*100:.1f}%", style={
-                        'color': '#4CAF50',
-                        'textAlign': 'center',
-                        'padding': '20px',
-                        'fontSize': '14px',
-                        'fontWeight': 'bold'
-                    })
-                ])
+                # Round progress to nearest 10% increment for smoother visual updates
+                progress_percent = int(progress * 100)
+                display_percent = (progress_percent // 10) * 10  # Round down to nearest 10
                 
-                viewport = job_store.get('viewport', 'viewport1')
-                if viewport == 'viewport1':
-                    return progress_msg, no_update, job_store
-                else:
-                    return no_update, progress_msg, job_store
+                # Update progress bar
+                progress_style = {
+                    'width': f'{display_percent}%',
+                    'height': '100%',
+                    'backgroundColor': '#4CAF50',
+                    'borderRadius': '4px',
+                    'transition': 'width 0.3s ease'
+                }
+                
+                return no_update, no_update, progress_style, f"Processing... {display_percent}%", no_update
             
-            # Job is no longer processing, check result
+            # Job is complete - get result
             result = self.controller.get_job_result()
             viewport = job_store.get('viewport', 'viewport1')
             
             # Reset job store
             job_store['job_started'] = False
             job_store['viewport'] = None
+            
+            # Set progress bar to 100% when complete
+            progress_style = {
+                'width': '100%',
+                'height': '100%',
+                'backgroundColor': '#4CAF50',
+                'borderRadius': '4px',
+                'transition': 'width 0.3s ease'
+            }
             
             if result is None:
                 # Error or no result
@@ -405,9 +413,9 @@ class Callbacks:
                 ])
                 
                 if viewport == 'viewport1':
-                    return error_div, no_update, job_store
+                    return error_div, no_update, progress_style, "Error", job_store
                 else:
-                    return no_update, error_div, job_store
+                    return no_update, error_div, progress_style, "Error", job_store
             
             # Create display for the mixed image
             try:
@@ -443,10 +451,11 @@ class Callbacks:
                     )
                 ], style={'height': '100%', 'width': '100%'})
                 
+                # Show 100% complete
                 if viewport == 'viewport1':
-                    return mixed_display, no_update, job_store
+                    return mixed_display, no_update, progress_style, "Complete - 100%", job_store
                 else:
-                    return no_update, mixed_display, job_store
+                    return no_update, mixed_display, progress_style, "Complete - 100%", job_store
                 
             except Exception as e:
                 error_div = html.Div([
@@ -459,6 +468,36 @@ class Callbacks:
                 ])
                 
                 if viewport == 'viewport1':
-                    return error_div, no_update, job_store
+                    return error_div, no_update, progress_style, "Error", job_store
                 else:
-                    return no_update, error_div, job_store
+                    return no_update, error_div, progress_style, "Error", job_store
+
+
+    def _rect_update_callback(self):
+        @self.app.callback(
+            Output({'type': 'ft-graph', 'card_id': MATCH}, 'figure'),
+            Input({'type': 'ft-graph', 'card_id': MATCH}, 'relayoutData'),
+            Input('roi-select', 'value'),
+            State({'type': 'ft-graph', 'card_id': MATCH}, 'figure'),
+            prevent_initial_call=True
+            )
+        def remove_old_rect(relayoutData, roi_select, fig):
+            if not relayoutData:
+                return no_update
+
+            if 'shapes' not in relayoutData:
+                return no_update
+
+            new_rect = relayoutData['shapes'][-1]
+            fig['layout']['shapes'] = [new_rect]
+            
+            if roi_select == 'inner':
+                is_inner = True
+            else:
+                is_inner = False
+            x0, y0 = int(new_rect['x0']), int(new_rect['y0'])
+            x1, y1 = int(new_rect['x1']), int(new_rect['y1'])
+            self.controller.apply_region_mask((x0,y0,x1,y1),is_inner)
+
+            return fig
+

@@ -54,7 +54,6 @@ class Layout:
                         children=html.Div("Upload an image"),
                         multiple=False,
                         accept="image/*",
-                        # style={'height': '40px', 'marginBottom': '2px'}
                         style=upload_style
                     ),
 
@@ -102,7 +101,7 @@ class Layout:
             **card_style,
             'display': 'flex',
             'flexDirection': 'column',
-            'overflow': 'hidden'   # ← ADDED
+            'overflow': 'hidden'
         })
 
     def build_settings_section(self, text_color):
@@ -112,7 +111,7 @@ class Layout:
         - Single mode dropdown for Magnitude/Phase or Real/Imaginary
         - ROI dropdown for Inner/Outer selection
         - Two output displays for viewport results
-        - Mix button
+        - Mix button with loading bar side by side
         """
         
         output_display_style = {
@@ -128,7 +127,7 @@ class Layout:
         }
         
         mix_button_style = {
-            "width": "100%",
+            "flex": "0 0 120px",
             "padding": "12px",
             "fontSize": "16px",
             "fontWeight": "bold",
@@ -138,7 +137,8 @@ class Layout:
             "border": "none",
             "borderRadius": "8px",
             "transition": "background-color 0.3s, transform 0.1s",
-            "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.3)"
+            "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.3)",
+            "marginRight": "12px"
         }
         
         return html.Div([
@@ -274,13 +274,57 @@ class Layout:
                     )
                 ], style={'marginBottom': '16px'}),
                 
-                # Mix Button
-                html.Button(
-                    'Mix',
-                    id='mix-button',
-                    n_clicks=0,
-                    style=mix_button_style
-                )
+                # Mix Button and Loading Bar side by side
+                html.Div([
+                    html.Button(
+                        'Mix',
+                        id='mix-button',
+                        n_clicks=0,
+                        style=mix_button_style
+                    ),
+                    
+                    # Loading Bar Container
+                    html.Div([
+                        html.Div(
+                            id='progress-text',
+                            children='Ready',
+                            style={
+                                'color': text_color,
+                                'fontSize': '12px',
+                                'marginBottom': '4px',
+                                'textAlign': 'center'
+                            }
+                        ),
+                        html.Div([
+                            html.Div(
+                                id='progress-bar',
+                                style={
+                                    'width': '0%',
+                                    'height': '100%',
+                                    'backgroundColor': '#4CAF50',
+                                    'borderRadius': '4px',
+                                    'transition': 'width 0.3s ease'
+                                }
+                            )
+                        ], style={
+                            'width': '100%',
+                            'height': '20px',
+                            'backgroundColor': '#404040',
+                            'borderRadius': '4px',
+                            'overflow': 'hidden'
+                        })
+                    ], style={
+                        'flex': '1',
+                        'display': 'flex',
+                        'flexDirection': 'column',
+                        'justifyContent': 'center'
+                    })
+                ], style={
+                    'display': 'flex',
+                    'flexDirection': 'row',
+                    'alignItems': 'center',
+                    'width': '100%'
+                })
             ])
         ])
 
