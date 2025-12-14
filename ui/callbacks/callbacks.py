@@ -48,6 +48,9 @@ class Callbacks:
         for i in range(1, 5):
             self._create_image_callback(i)
 
+        # -------- REFRESH ALL DISPLAYS CALLBACK (NEW) -------- #
+        self._create_refresh_all_callback()
+
         # -------- COMPONENT SELECT CALLBACKS -------- #
         for i in range(1, 5):
             self._create_component_select_callback(i)
@@ -74,7 +77,8 @@ class Callbacks:
             [
                 Output(f'image-display-{card_id}', 'children'),
                 Output(f'ft-display-{card_id}', 'children'),
-                Output(f'component-select-{card_id}', 'value', allow_duplicate=True)
+                Output(f'component-select-{card_id}', 'value', allow_duplicate=True),
+                Output('resize-trigger', 'data', allow_duplicate=True)  # NEW: Trigger refresh
             ],
             Input(f'upload-image-{card_id}', 'contents'),
             [
@@ -85,7 +89,7 @@ class Callbacks:
         )
         def update_image_and_ft(contents, ft_mode, current_component):
             if not contents:
-                return html.Div(), html.Div(), None
+                return html.Div(), html.Div(), None, no_update
             
             # Default FT mode if None
             if ft_mode is None:
@@ -108,7 +112,7 @@ class Callbacks:
                     f"Error: {result['message']}",
                     style={'color': 'red', 'padding': '20px'}
                 )
-                return error_div, error_div, ft_component
+                return error_div, error_div, ft_component, no_update
             
             # Get data directly from handle_upload result
             raw_image_data = np.array(result['raw_image_data'])
@@ -122,15 +126,15 @@ class Callbacks:
                 hoverinfo='skip'
             ))
             raw_fig.update_layout(
-                xaxis={'visible': False, 'showgrid': False, 'fixedrange': True},
-                yaxis={'visible': False, 'showgrid': False, 'autorange': 'reversed', 'fixedrange': True},
+                xaxis={'visible': False, 'showgrid': False, 'fixedrange': True, 'constrain': 'domain'},
+                yaxis={'visible': False, 'showgrid': False, 'autorange': 'reversed', 'fixedrange': True, 'scaleanchor': 'x', 'scaleratio': 1},
                 margin=dict(l=0, r=0, t=0, b=0),
                 paper_bgcolor='#0f0f0f',
                 plot_bgcolor='#0f0f0f',
-                autosize=True,
+                width=None,
+                height=None,
                 dragmode=False
             )
-            raw_fig.update_yaxes(scaleanchor="x", scaleratio=1)
             
             ft_fig = go.Figure(data=go.Heatmap(
                 z=ft_component_data,
@@ -139,16 +143,16 @@ class Callbacks:
                 hoverinfo='skip'
             ))
             ft_fig.update_layout(
-                xaxis={'visible': False, 'showgrid': False},
-                yaxis={'visible': False, 'showgrid': False, 'autorange': 'reversed'},
+                xaxis={'visible': False, 'showgrid': False, 'constrain': 'domain'},
+                yaxis={'visible': False, 'showgrid': False, 'autorange': 'reversed', 'scaleanchor': 'x', 'scaleratio': 1},
                 margin=dict(l=0, r=0, t=0, b=0),
                 paper_bgcolor='#0f0f0f',
                 plot_bgcolor='#0f0f0f',
+                width=None,
+                height=None,
                 dragmode='drawrect',
-                newshape=dict(line_color='cyan'),
-                autosize=True
+                newshape=dict(line_color='cyan')
             )
-            ft_fig.update_yaxes(scaleanchor="x", scaleratio=1)
             
             raw_display = html.Div([
                 dcc.Graph(
@@ -168,7 +172,144 @@ class Callbacks:
                 )
             ], style={'height': '100%', 'width': '100%'})
             
-            return raw_display, ft_display, ft_component
+            # Trigger refresh of other cards by updating the trigger store
+            import time
+            trigger_data = {'timestamp': time.time(), 'card_id': card_id}
+            
+            return raw_display, ft_display, ft_component, trigger_data
+
+
+    def _create_refresh_all_callback(self):
+        """
+        NEW: Refresh all OTHER card displays when any upload happens.
+        This ensures that when backend resizes images, all displays update.
+        """
+        @self.app.callback(
+            [
+                Output(f'image-display-{i}', 'children', allow_duplicate=True)
+                for i in range(1, 5)
+            ] + [
+                Output(f'ft-display-{i}', 'children', allow_duplicate=True)
+                for i in range(1, 5)
+            ],
+            Input('resize-trigger', 'data'),
+            [
+                State('ft-mode-select', 'value')
+            ] + [
+                State(f'component-select-{i}', 'value')
+                for i in range(1, 5)
+            ],
+            prevent_initial_call=True
+        )
+        def refresh_all_displays(trigger_data, ft_mode, comp1, comp2, comp3, comp4):
+            """
+            When resize-trigger updates, refresh ALL displays except the one that just uploaded.
+            """
+            if not trigger_data:
+                return [no_update] * 8
+            
+            triggered_card = trigger_data.get('card_id', 0)
+            
+            if ft_mode is None:
+                ft_mode = 'mag_phase'
+            
+            current_components = [comp1, comp2, comp3, comp4]
+            outputs = []
+            
+            for card_id in range(1, 5):
+                # Skip the card that just uploaded (it already updated itself)
+                if card_id == triggered_card:
+                    outputs.append(no_update)  # image-display
+                    continue
+                
+                image_model = self.controller.get_session().get_image(card_id - 1)
+                
+                if image_model is None:
+                    outputs.append(no_update)  # image-display
+                    continue
+                
+                # Get resized data from backend
+                raw_data = image_model.get_visual_data('raw')
+                
+                # Create figure with aspect ratio lock
+                raw_fig = go.Figure(data=go.Heatmap(
+                    z=raw_data,
+                    colorscale='gray',
+                    showscale=False,
+                    hoverinfo='skip'
+                ))
+                raw_fig.update_layout(
+                    xaxis={'visible': False, 'showgrid': False, 'fixedrange': True, 'constrain': 'domain'},
+                    yaxis={'visible': False, 'showgrid': False, 'autorange': 'reversed', 'fixedrange': True, 'scaleanchor': 'x', 'scaleratio': 1},
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    paper_bgcolor='#0f0f0f',
+                    plot_bgcolor='#0f0f0f',
+                    width=None,
+                    height=None,
+                    dragmode=False
+                )
+                
+                raw_display = html.Div([
+                    dcc.Graph(
+                        id=f'raw-graph-{card_id}',
+                        figure=raw_fig,
+                        config={'displayModeBar': False},
+                        style={'height': '100%', 'width': '100%'},
+                    )
+                ], style={'height': '100%', 'width': '100%'})
+                
+                outputs.append(raw_display)
+            
+            # Now handle FT displays
+            for card_id in range(1, 5):
+                # Skip the card that just uploaded
+                if card_id == triggered_card:
+                    outputs.append(no_update)  # ft-display
+                    continue
+                
+                image_model = self.controller.get_session().get_image(card_id - 1)
+                
+                if image_model is None:
+                    outputs.append(no_update)  # ft-display
+                    continue
+                
+                # Determine component
+                component_value = current_components[card_id - 1]
+                if component_value is None:
+                    component_value = 'magnitude' if ft_mode == 'mag_phase' else 'real'
+                
+                ft_data = image_model.get_visual_data(component_value)
+                
+                ft_fig = go.Figure(data=go.Heatmap(
+                    z=ft_data,
+                    colorscale='gray',
+                    showscale=False,
+                    hoverinfo='skip'
+                ))
+                ft_fig.update_layout(
+                    xaxis={'visible': False, 'showgrid': False, 'constrain': 'domain'},
+                    yaxis={'visible': False, 'showgrid': False, 'autorange': 'reversed', 'scaleanchor': 'x', 'scaleratio': 1},
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    paper_bgcolor='#0f0f0f',
+                    plot_bgcolor='#0f0f0f',
+                    width=None,
+                    height=None,
+                    dragmode='drawrect',
+                    newshape=dict(line_color='cyan')
+                )
+                
+                ft_display = html.Div([
+                    dcc.Graph(
+                        id={'type': 'ft-graph', 'card_id': card_id},
+                        figure=ft_fig,
+                        config={'displayModeBar': False},
+                        style={'height': '100%', 'width': '100%'}
+                    )
+                ], style={'height': '100%', 'width': '100%'})
+                
+                outputs.append(ft_display)
+            
+            return outputs
 
 
     def _create_component_select_callback(self, card_id):
@@ -206,16 +347,16 @@ class Callbacks:
                 hoverinfo='skip'
             ))
             ft_fig.update_layout(
-                xaxis={'visible': False, 'showgrid': False},
-                yaxis={'visible': False, 'showgrid': False, 'autorange': 'reversed'},
+                xaxis={'visible': False, 'showgrid': False, 'constrain': 'domain'},
+                yaxis={'visible': False, 'showgrid': False, 'autorange': 'reversed', 'scaleanchor': 'x', 'scaleratio': 1},
                 margin=dict(l=0, r=0, t=0, b=0),
                 paper_bgcolor='#0f0f0f',
                 plot_bgcolor='#0f0f0f',
+                width=None,
+                height=None,
                 dragmode='drawrect',
-                newshape=dict(line_color='cyan'),
-                autosize=True
+                newshape=dict(line_color='cyan')
             )
-            ft_fig.update_yaxes(scaleanchor="x", scaleratio=1)
             
             return html.Div([
                 dcc.Graph(
@@ -234,10 +375,10 @@ class Callbacks:
         """
         @self.app.callback(
             [Output(f'component-select-{i}', 'options') for i in range(1, 5)] +
-            [Output(f'component-select-{i}', 'value') for i in range(1, 5)],
+            [Output(f'component-select-{i}', 'value', allow_duplicate=True) for i in range(1, 5)],
             Input('ft-mode-select', 'value'),
             [State(f'component-select-{i}', 'value') for i in range(1, 5)],
-            prevent_initial_call=False
+            prevent_initial_call='initial_duplicate'
         )
         def update_component_dropdowns_and_values(mode, *current_values):
             
@@ -500,4 +641,3 @@ class Callbacks:
             self.controller.apply_region_mask((x0,y0,x1,y1),is_inner)
 
             return fig
-

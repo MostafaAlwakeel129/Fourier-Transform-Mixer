@@ -231,8 +231,6 @@ class Controller:
         if component_group == 'comp1':
             self._weights_comp1[index] = val
             self._weights_comp2[index] = 0
-            print(self._weights_comp1[index])
-            print(self._weights_comp2[index])
         else:
             self._weights_comp2[index] = val
             self._weights_comp1[index] = 0

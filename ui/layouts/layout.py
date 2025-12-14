@@ -463,6 +463,11 @@ class Layout:
                 n_intervals=0,
                 disabled=False
             ),
+
+            dcc.Store(
+                id='resize-trigger',
+                data={}
+            ),
             
             # Hidden store component to track job state
             dcc.Store(
