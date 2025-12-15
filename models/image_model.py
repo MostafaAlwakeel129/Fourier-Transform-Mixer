@@ -13,6 +13,10 @@ class ImageModel:
 
     def __init__(self):
         """Initialize ImageModel with empty data and thread lock."""
+        # Store ORIGINAL image data separately to allow resizing back to larger sizes
+        self._original_raw_pixels: Optional[np.ndarray] = None
+        
+        # Working copy that gets resized
         self._ndarray_raw_pixels: Optional[np.ndarray] = None
         self._ndarray_complex_arr: Optional[np.ndarray] = None
         self.shape: Tuple[int, ...] = ()
@@ -30,7 +34,6 @@ class ImageModel:
         """
         Load image data from a base64 string (Thread-Safe).
         """
-        # Decode base64 string
         try:
             header, encoded = base64_string.split(',', 1)
             image_data = base64.b64decode(encoded)
@@ -43,29 +46,34 @@ class ImageModel:
                 image = image.convert('L')
 
             with self._lock:
-                # Convert to numpy array
-                self._ndarray_raw_pixels = np.array(image, dtype=np.float64)
+                # Store ORIGINAL data (never modified)
+                self._original_raw_pixels = np.array(image, dtype=np.float64)
+                
+                # Also set working copy
+                self._ndarray_raw_pixels = self._original_raw_pixels.copy()
                 self.shape = self._ndarray_raw_pixels.shape
 
                 # Reset cached data
                 self._reset_cache()
 
         except Exception as e:
-            print(f"Error loading image: {e}")
+            raise Exception(f"Error loading image: {e}")
 
     def resize(self, target_shape: Tuple[int, ...]) -> None:
         """
         Resize the image to a target shape (Thread-Safe).
+        Always resizes from ORIGINAL data to avoid quality degradation.
         """
         with self._lock:
-            if self._ndarray_raw_pixels is None:
+            if self._original_raw_pixels is None:
                 return
 
-            # Resize using PIL
-            image = Image.fromarray(self._ndarray_raw_pixels.astype(np.uint8))
+            # Always resize from ORIGINAL, not from current resized version
+            # This allows "growing back" to larger sizes
+            image = Image.fromarray(self._original_raw_pixels.astype(np.uint8))
             image = image.resize((target_shape[1], target_shape[0]), Image.Resampling.LANCZOS)
 
-            # Update raw pixels and shape
+            # Update working pixels and shape
             self._ndarray_raw_pixels = np.array(image, dtype=np.float64)
             self.shape = target_shape
 

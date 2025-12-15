@@ -21,16 +21,7 @@ class GlobalSessionState:
             image_model: ImageModel instance to store
         """
         self._images[index] = image_model
-        
-        # Update minimum shape
-        if self._min_shape is None:
-            self._min_shape = image_model.shape
-        else:
-            # Find minimum dimensions
-            self._min_shape = (
-                min(self._min_shape[0], image_model.shape[0]),
-                min(self._min_shape[1], image_model.shape[1])
-            )
+        # min_shape is managed by UnitUnificator
     
     def get_image(self, index: int) -> Optional[ImageModel]:
         """
@@ -89,13 +80,6 @@ class GlobalSessionState:
         """
         if index in self._images:
             del self._images[index]
-            # Recalculate min_shape if needed
-            if self._images:
-                shapes = [img.shape for img in self._images.values()]
-                self._min_shape = (
-                    min(s[0] for s in shapes),
-                    min(s[1] for s in shapes)
-                )
-            else:
+            # Clear min_shape if no images remain
+            if not self._images:
                 self._min_shape = None
-

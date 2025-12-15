@@ -164,51 +164,51 @@ class Controller:
         self._current_mask: Optional[np.ndarray] = None
 
     def handle_upload(self, contents: str, index: int, ft_component: str = 'magnitude') -> Dict[str, Any]:
-        """
-        Handle image uploads.
+            """
+            Handle image uploads.
 
-        Args:
-            contents: Base64 encoded image content
-            index: Index of the viewport where image is uploaded
+            Args:
+                contents: Base64 encoded image content
+                index: Index of the viewport where image is uploaded
+                ft_component: FT component to display
 
-        Returns:
-                Handle image uploads and prepare display data.
-                Returns ALL FT components so the callback can choose which to display.
-        """
-        try:
-            if contents is None:
-                return {'status': 'error', 'message': 'No content provided'}
+            Returns:
+                Dictionary with upload status and display data
+            """
+            try:
+                if contents is None:
+                    return {'status': 'error', 'message': 'No content provided'}
 
-            # Create new ImageModel and load from contents
-            image_model = ImageModel()  # creates instance of imagemodel (due to image being uploaded)
-            image_model.load_from_contents(contents)  # process image and converts go gray scale
+                # Remove old image at this index if it exists
+                if self._session.get_image(index) is not None:
+                    self._session.remove_image(index)
 
-            # Store in session
-            self._session.store_image(index, image_model)  # stores the current image_model data and its index
+                # Create new ImageModel and load from contents
+                image_model = ImageModel()
+                image_model.load_from_contents(contents)
 
-            # Enforce unified size across all images
-            self._unificator.enforce_unified_size(
-                self._session)  # gets all present image models from globalsessionstate and gets minimum width/height from the created min_shape tuple then STORES the current min shape of all the currently uploaded images then resizes all images.
+                # Store in session
+                self._session.store_image(index, image_model)
 
-            # Get visual data (ImageModel handles log transform and normalization internally)
-            raw_image_data = image_model.get_visual_data('raw')
-            ft_component_data = image_model.get_visual_data(ft_component)
+                # Enforce unified size across all images
+                self._unificator.enforce_unified_size(self._session)
 
-            # Note: We do NOT apply np.log here anymore because get_visual_data() already does it.
-            # This prevents the "Double Log" bug.
+                # Get visual data (ImageModel handles log transform and normalization internally)
+                raw_image_data = image_model.get_visual_data('raw')
+                ft_component_data = image_model.get_visual_data(ft_component)
 
-            return {
-                'status': 'success',
-                'message': f'Image {index + 1} uploaded successfully',
-                'raw_image_data': raw_image_data.tolist(),
-                'ft_component_data': ft_component_data.tolist(),
-                'ft_component_type': ft_component,
-                'image_shape': image_model.shape,
-                'unified_shape': self._session.get_min_shape()
-            }
+                return {
+                    'status': 'success',
+                    'message': f'Image {index + 1} uploaded successfully',
+                    'raw_image_data': raw_image_data.tolist(),
+                    'ft_component_data': ft_component_data.tolist(),
+                    'ft_component_type': ft_component,
+                    'image_shape': image_model.shape,
+                    'unified_shape': self._session.get_min_shape()
+                }
 
-        except Exception as e:
-            return {'status': 'error', 'message': str(e)}
+            except Exception as e:
+                return {'status': 'error', 'message': str(e)}
 
     def handle_slider_update(self, val: float, index: int, component_group: str) -> Dict[str, Any]:
         """

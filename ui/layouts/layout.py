@@ -9,10 +9,7 @@ class Layout:
 
     def build_input_card(self, card_id, text_color, card_style, display_item_style, upload_style):
         """
-        Creates a single input card with two columns:
-        - Left: Image display
-        - Right: Component dropdown + FT display
-        - Header: Includes Title and Weight Slider side-by-side
+        Creates a single input card with two columns.
         """
         return html.Div([
             # Header with Title and Slider side-by-side
@@ -30,7 +27,7 @@ class Layout:
                         id=f'weight-slider-{card_id}',
                         min=0, max=1, step=0.05,
                         value=0.0,
-                        marks={0: '0', 1: '1'}, # Minimal marks to save space
+                        marks={0: '0', 1: '1'}, 
                         tooltip={"placement": "bottom", "always_visible": False},
                     )
                 ], style={'flex': '1', 'paddingTop': '8px'}) 
@@ -46,9 +43,8 @@ class Layout:
             # Two columns: Image and FT Display
             html.Div([
                 # Left Column: Image Display Area
-
                 html.Div([
-                    # Upload area (small, fixed height)
+                    # Upload area
                     dcc.Upload(
                         id=f'upload-image-{card_id}',
                         children=html.Div("Upload an image"),
@@ -57,7 +53,7 @@ class Layout:
                         style=upload_style
                     ),
 
-                    # Display area (flex 1, will show image)
+                    # Display area
                     html.Div(
                         id=f'image-display-{card_id}',
                         style={**display_item_style, 'flex': 1, 'minHeight': '200px', 'borderRadius': '8px', 'backgroundColor': '#0f0f0f'}
@@ -70,7 +66,7 @@ class Layout:
                     html.Div([
                         dcc.Dropdown(
                             id=f'component-select-{card_id}',
-                            options=[],  # Will be populated based on mode
+                            options=[],  
                             value=None,
                             placeholder="Select component",
                             style={'width': '100%', 'color': 'black'}
@@ -106,24 +102,27 @@ class Layout:
 
     def build_settings_section(self, text_color):
         """
-        Creates the settings section with:
-        - Radio buttons for Viewport 1 and Viewport 2
-        - Single mode dropdown for Magnitude/Phase or Real/Imaginary
-        - ROI dropdown for Inner/Outer selection
-        - Two output displays for viewport results
-        - Mix button with loading bar side by side
+        Creates the settings section.
+        Updated to make output viewports the same size as input viewports.
         """
         
+        # Calculate height to match the Input Card Image Display
+        # Input cards are calc((100vh - 52px) / 2). 
+        # We subtract approx 60px for headers/margins to match the visual viewport size.
+        viewport_height = "calc((100vh - 52px) / 2 - 60px)"
+
         output_display_style = {
+            "height": viewport_height, 
+            "minHeight": "300px",       # Ensure it doesn't get too small
+            "width": "100%",            # Fill the container width
             "borderRadius": "8px",
             "backgroundColor": "#0f0f0f",
             "overflow": "hidden",
             "display": "flex",
             "alignItems": "center",
             "justifyContent": "center",
-            "minHeight": "150px",
-            "marginBottom": "12px",
-            "border": "1px solid #404040"
+            "border": "1px solid #404040",
+            "flex": "none"              # IMPORTANT: Prevents flexbox from shrinking it
         }
         
         mix_button_style = {
@@ -216,7 +215,7 @@ class Layout:
                 'borderBottom': '1px solid #404040'
             }),
             
-            # Output Section
+            # Output Section - STACKED VERTICALLY
             html.Div([
                 html.Label('Output:', style={
                     'color': text_color,
@@ -248,7 +247,7 @@ class Layout:
                         ],
                         style=output_display_style
                     )
-                ], style={'marginBottom': '12px'}),
+                ], style={'marginBottom': '20px', 'display': 'flex', 'flexDirection': 'column'}),
                 
                 # Viewport 2 Output
                 html.Div([
@@ -272,7 +271,7 @@ class Layout:
                         ],
                         style=output_display_style
                     )
-                ], style={'marginBottom': '16px'}),
+                ], style={'marginBottom': '20px', 'display': 'flex', 'flexDirection': 'column'}),
                 
                 # Mix Button and Loading Bar side by side
                 html.Div([
@@ -323,7 +322,8 @@ class Layout:
                     'display': 'flex',
                     'flexDirection': 'row',
                     'alignItems': 'center',
-                    'width': '100%'
+                    'width': '100%',
+                    'paddingBottom': '20px' # Extra padding at the bottom for scrolling space
                 })
             ])
         ])
@@ -456,10 +456,9 @@ class Layout:
                 'left': '0',
             }),
             
-            # Hidden interval component for polling job progress
             dcc.Interval(
                 id='interval-component',
-                interval=1000,  # Update every 1 second (1000ms)
+                interval=1000,
                 n_intervals=0,
                 disabled=False
             ),
@@ -469,7 +468,6 @@ class Layout:
                 data={}
             ),
             
-            # Hidden store component to track job state
             dcc.Store(
                 id='job-store',
                 data={

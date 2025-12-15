@@ -20,7 +20,7 @@ class UnitUnificator:
         if not images:
             return
         
-        # Find minimum dimensions
+        # Always recalculate min dimensions from original image sizes
         min_shape = self._find_min_dimensions(images)
         
         # Update state's min_shape
@@ -34,6 +34,7 @@ class UnitUnificator:
     def _find_min_dimensions(self, images: List[ImageModel]) -> Tuple[int, int]:
         """
         Find the minimum dimensions among a set of images.
+        Uses ORIGINAL image sizes to allow growing back to larger dimensions.
         
         Args:
             images: List of ImageModel instances
@@ -44,8 +45,17 @@ class UnitUnificator:
         if not images:
             raise ValueError("Cannot find min dimensions of empty image list")
         
-        min_height = min(img.shape[0] for img in images)
-        min_width = min(img.shape[1] for img in images)
+        min_height = float('inf')
+        min_width = float('inf')
         
-        return (min_height, min_width)
-
+        for img in images:
+            # Use original shape if available, otherwise fall back to current shape
+            if hasattr(img, '_original_raw_pixels') and img._original_raw_pixels is not None:
+                h, w = img._original_raw_pixels.shape
+            else:
+                h, w = img.shape
+            
+            min_height = min(min_height, h)
+            min_width = min(min_width, w)
+        
+        return (int(min_height), int(min_width))
