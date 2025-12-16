@@ -512,7 +512,7 @@ class Layout:
         return html.Div([
             # Header with Title and Slider side-by-side
             html.Div([
-                html.H3(f'Input {card_id}', style={
+                html.H3(f'Image {card_id}', style={
                     'margin': '0',
                     'color': text_color,
                     'whiteSpace': 'nowrap',

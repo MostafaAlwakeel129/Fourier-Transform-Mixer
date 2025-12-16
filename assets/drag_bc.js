@@ -1,14 +1,13 @@
 (function () {
     // Tuning knobs
-    const CONTRAST_SENS = 0.005;   // horizontal sensitivity
-    const BRIGHT_SENS = 0.003;     // vertical sensitivity (scaled by window width)
-    const SAMPLE_TARGET = 5000;    // sampling for robust min/max
+    const CONTRAST_SENS = 0.005;
+    const BRIGHT_SENS = 0.003;
+    const SAMPLE_TARGET = 5000;
     const P_LO = 0.02, P_HI = 0.98;
 
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
     function sampleZ(z) {
-        // z is typically 2D array (rows)
         if (!Array.isArray(z) || z.length === 0) return [];
         const rows = z.length;
         const cols = Array.isArray(z[0]) ? z[0].length : 0;
@@ -40,7 +39,6 @@
     }
 
     function initState(gd) {
-        // gd is the Plotly graph div (class js-plotly-plot)
         if (gd._bcState) return gd._bcState;
 
         const trace = gd.data && gd.data[0];
@@ -48,7 +46,6 @@
         const s = sampleZ(z);
         s.sort((a, b) => a - b);
 
-        // robust defaults from percentiles (prevents a few hot pixels from ruining contrast)
         let baseMin = percentile(s, P_LO);
         let baseMax = percentile(s, P_HI);
         if (!(baseMax > baseMin)) { baseMin = 0; baseMax = 1; }
@@ -58,17 +55,14 @@
             dragging: false,
             lastX: null,
             lastY: null,
-
             baseMin,
             baseMax,
             baseCenter: (baseMin + baseMax) / 2,
             baseWidth,
-
             center: (baseMin + baseMax) / 2,
             width: baseWidth,
-
-            minWidth: baseWidth / 2000,      // don’t let it collapse to 0
-            maxWidth: baseWidth * 50         // don’t let it explode forever
+            minWidth: baseWidth / 2000,
+            maxWidth: baseWidth * 50
         };
 
         gd._bcState = state;
@@ -80,8 +74,6 @@
         const half = st.width / 2;
         const zmin = st.center - half;
         const zmax = st.center + half;
-
-        // Update only mapping (not the data) => instant
         Plotly.restyle(gd, { zmin: [zmin], zmax: [zmax] }, [0]);
     }
 
@@ -92,11 +84,54 @@
         applyWindow(gd);
     }
 
+    // NEW: Get the paired FT graph for a given raw graph
+    function getPairedFtGraph(rawGraphId) {
+        // Extract card number from raw-graph-N
+        const match = rawGraphId.match(/raw-graph-(\d+)/);
+        if (!match) return null;
+        
+        const cardId = match[1];
+        
+        // Find the FT graph with matching card_id
+        const ftGraphs = document.querySelectorAll('[id*="ft-graph"]');
+        for (let ftGraph of ftGraphs) {
+            const ftId = ftGraph.id;
+            if (ftId.includes(`"card_id":${cardId}`) || ftId.includes(`'card_id':${cardId}`)) {
+                return ftGraph.querySelector('.js-plotly-plot');
+            }
+        }
+        return null;
+    }
+
+    // NEW: Sync brightness/contrast from raw to FT
+    function syncToFtGraph(rawGd) {
+        const rawState = rawGd._bcState;
+        if (!rawState) return;
+
+        const ftGd = getPairedFtGraph(rawGd.parentElement.id);
+        if (!ftGd) return;
+
+        // Initialize FT graph state if needed
+        const ftState = initState(ftGd);
+        
+        // Calculate the adjustment ratios from raw graph
+        const centerOffset = rawState.center - rawState.baseCenter;
+        const widthRatio = rawState.width / rawState.baseWidth;
+
+        // Apply the same relative adjustments to FT graph
+        ftState.center = ftState.baseCenter + (centerOffset * (ftState.baseWidth / rawState.baseWidth));
+        ftState.width = ftState.baseWidth * widthRatio;
+        
+        // Clamp to valid range
+        ftState.width = clamp(ftState.width, ftState.minWidth, ftState.maxWidth);
+
+        applyWindow(ftGd);
+    }
+
     function attachToGraphDiv(gd) {
         if (!gd || gd.dataset.bcAttached === "1") return;
         gd.dataset.bcAttached = "1";
 
-        // Make pointer events reliable (touch + pen too)
         gd.style.touchAction = "none";
         gd.style.cursor = "grab";
 
@@ -118,14 +153,14 @@
             st.lastX = e.clientX;
             st.lastY = e.clientY;
 
-            // Horizontal => contrast (window width), exponential feels nice
             const factor = Math.exp(dx * CONTRAST_SENS);
             st.width = clamp(st.width * factor, st.minWidth, st.maxWidth);
-
-            // Vertical => brightness (window center), scale by width so it feels consistent
             st.center += (-dy) * (st.width * BRIGHT_SENS);
 
             applyWindow(gd);
+            
+            // NEW: Sync to paired FT graph
+            syncToFtGraph(gd);
         });
 
         const stopDrag = () => {
@@ -138,26 +173,40 @@
         gd.addEventListener("pointercancel", stopDrag);
         gd.addEventListener("pointerleave", stopDrag);
 
-        // Double click to reset window/level
         gd.addEventListener("dblclick", (e) => {
             e.preventDefault();
             resetWindow(gd);
+            
+            // NEW: Also reset paired FT graph
+            const ftGd = getPairedFtGraph(gd.parentElement.id);
+            if (ftGd) {
+                resetWindow(ftGd);
+            }
         });
     }
 
     function scanAndAttach() {
-        // We attached stable ids: raw-graph-1..4, so look for them
+        // Attach to input raw graphs (1-4)
         for (let i = 1; i <= 4; i++) {
             const outer = document.getElementById(`raw-graph-${i}`);
             if (!outer) continue;
 
-            // Plotly graph div inside dcc.Graph
             const gd = outer.querySelector(".js-plotly-plot");
+            if (gd) attachToGraphDiv(gd);
+        }
+
+        // Attach to output viewports (viewport1 and viewport2)
+        const outputViewports = ['output-viewport1', 'output-viewport2'];
+        for (let viewportId of outputViewports) {
+            const viewport = document.getElementById(viewportId);
+            if (!viewport) continue;
+
+            // Find the Plotly graph div inside the viewport
+            const gd = viewport.querySelector(".js-plotly-plot");
             if (gd) attachToGraphDiv(gd);
         }
     }
 
-    // Attach now + whenever Dash re-renders graphs
     document.addEventListener("DOMContentLoaded", scanAndAttach);
     new MutationObserver(scanAndAttach).observe(document.body, { childList: true, subtree: true });
 })();
